@@ -23,7 +23,7 @@ st.set_page_config(page_title="Fake News Detector", page_icon="📰")
 # Title and description
 st.title("📰 Fake News Detector")
 st.markdown("""
-This app uses a Random Forest model to detect fake news articles.
+This app uses a Linear SVM model to detect fake news articles.
 Paste a news article or upload a .txt file to get a prediction.
 """)
 
@@ -34,11 +34,11 @@ except FileNotFoundError:
     st.error("Vectorizer file not found. Please ensure the model files are in the correct directory.")
     st.stop()
 
-# Load the Random Forest model
+# Load the Linear SVM model
 try:
-    model = joblib.load("Models/random_forest.pkl")
+    model = joblib.load("Models/linear_svm.pkl")
 except FileNotFoundError:
-    st.error("Random Forest model file not found. Please ensure the model file is in the correct directory.")
+    st.error("Linear SVM model file not found. Please ensure the model file is in the correct directory.")
     st.stop()
 
 # Create two columns for input options
@@ -76,14 +76,15 @@ if st.button("Predict"):
         result = "REAL 🟢" if prediction == 1 else "FAKE 🔴"
         st.markdown(f"### Prediction: {result}")
 
-        # Add probability for confidence
-        prob = model.predict_proba(transformed_input)[0][prediction]
-        st.markdown(f"**Confidence**: {prob:.2%} {'(Real)' if prediction == 1 else '(Fake)'}")
+        # Add decision score for confidence
+        decision_score = model.decision_function(transformed_input)[0]
+        confidence = 1 / (1 + np.exp(-decision_score))  # Convert to probability-like score
+        st.markdown(f"**Confidence**: {confidence:.2%} {'(Real)' if prediction == 1 else '(Fake)'}")
 
         # Add some context about the prediction
         with st.expander("About this prediction"):
             st.write(f"""
-            The Random Forest model has classified this article as {result.lower()}.
+            The Linear SVM model has classified this article as {result.lower()}.
             {'This indicates the article is likely to be genuine news.' if prediction == 1
             else 'This indicates the article is likely to be misleading or fabricated.'}
             Note: No model is 100% accurate, so consider this prediction alongside other sources.
@@ -93,4 +94,4 @@ if st.button("Predict"):
 
 # Add footer
 st.markdown("---")
-st.markdown("Built with Streamlit | Random forest model trained using scikit-learn | © 2025")
+st.markdown("Built with Streamlit | Linear SVM model trained using scikit-learn | © 2025")

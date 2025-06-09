@@ -2,11 +2,10 @@ import os
 import re
 import string
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from sklearn.linear_model import LogisticRegression
@@ -25,7 +24,6 @@ import joblib
 #        Data Preparation      #
 # ----------------------------- #
 
-# Automatically load all CSVs from "Data" folder
 data_dir = "Data"
 dfs = []
 for file in os.listdir(data_dir):
@@ -59,7 +57,6 @@ def clean_text(text):
 df['text'] = df['text'].apply(clean_text)
 df = df[df['label'].isin([0, 1])]
 
-# Features and labels
 X = df['text']
 y = df['label'].astype(int)
 
@@ -86,11 +83,28 @@ results = {}
 
 for name, model in models.items():
     model.fit(X_train_vec, y_train)
+
     preds = model.predict(X_test_vec)
     acc = accuracy_score(y_test, preds)
     f1 = f1_score(y_test, preds)
-    results[name] = {"model": model, "accuracy": acc, "f1": f1}
-    print(f"\n{name} Report:\n", classification_report(y_test, preds))
+
+    # Cross-validation on training data
+    cv_scores = cross_val_score(model, X_train_vec, y_train, cv=5, scoring='accuracy')
+    cv_mean = cv_scores.mean()
+    cv_std = cv_scores.std()
+
+    results[name] = {
+        "model": model,
+        "accuracy": acc,
+        "f1": f1,
+        "cv_mean": cv_mean,
+        "cv_std": cv_std
+    }
+
+    print(f"\n{name} Report:")
+    print(classification_report(y_test, preds))
+    print(f"Test Accuracy : {acc:.4f}")
+    print(f"Train CV Mean : {cv_mean:.4f} ± {cv_std:.4f}")
 
 # ----------------------------- #
 #         Visualizations        #
@@ -113,6 +127,23 @@ plt.grid(True)
 plt.savefig("model_scores.png")
 plt.show()
 
+# Cross-Validation vs Test Accuracy Plot
+cv_vs_test = pd.DataFrame({
+    "Model": list(results.keys()),
+    "CV Mean": [r["cv_mean"] for r in results.values()],
+    "Test Accuracy": [r["accuracy"] for r in results.values()]
+})
+
+cv_vs_test.set_index("Model").plot(kind="bar", figsize=(10, 6))
+plt.title("Cross-Validation vs Test Accuracy")
+plt.ylabel("Accuracy")
+plt.ylim(0.8, 1.0)
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("cv_vs_test_accuracy.png")
+plt.show()
+
 # Confusion Matrices
 fig, axs = plt.subplots(2, 2, figsize=(12, 10))
 axs = axs.flatten()
@@ -131,16 +162,16 @@ plt.show()
 plt.figure(figsize=(10, 6))
 for name, res in results.items():
     model = res["model"]
-    if hasattr(model, "predict_proba"):
-        probs = model.predict_proba(X_test_vec)[:, 1]
-    else:
-        try:
+    try:
+        if hasattr(model, "predict_proba"):
+            probs = model.predict_proba(X_test_vec)[:, 1]
+        else:
             probs = model.decision_function(X_test_vec)
-        except:
-            continue
-    fpr, tpr, _ = roc_curve(y_test, probs)
-    roc_auc = auc(fpr, tpr)
-    plt.plot(fpr, tpr, label=f"{name} (AUC = {roc_auc:.2f})")
+        fpr, tpr, _ = roc_curve(y_test, probs)
+        roc_auc = auc(fpr, tpr)
+        plt.plot(fpr, tpr, label=f"{name} (AUC = {roc_auc:.2f})")
+    except:
+        continue
 
 plt.plot([0, 1], [0, 1], 'k--')
 plt.xlabel("False Positive Rate")
@@ -156,15 +187,15 @@ plt.show()
 plt.figure(figsize=(10, 6))
 for name, res in results.items():
     model = res["model"]
-    if hasattr(model, "predict_proba"):
-        probs = model.predict_proba(X_test_vec)[:, 1]
-    else:
-        try:
+    try:
+        if hasattr(model, "predict_proba"):
+            probs = model.predict_proba(X_test_vec)[:, 1]
+        else:
             probs = model.decision_function(X_test_vec)
-        except:
-            continue
-    precision, recall, _ = precision_recall_curve(y_test, probs)
-    plt.plot(recall, precision, label=name)
+        precision, recall, _ = precision_recall_curve(y_test, probs)
+        plt.plot(recall, precision, label=name)
+    except:
+        continue
 
 plt.xlabel("Recall")
 plt.ylabel("Precision")
